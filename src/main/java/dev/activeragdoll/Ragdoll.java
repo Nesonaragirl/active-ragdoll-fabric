@@ -466,7 +466,7 @@ public final class Ragdoll {
 		link(CHEST, HEADTOP, HEAD, 0.5, 1.0);
 		for (int s = 0; s < 2; s++) {
 			double wf = (ground && !swinging[s] && muscle > 0.2) ? 0.02 : 1.0;
-			linkOff(PELVIS, hipOff[s], FOOT_R + s, LEG, 0.35, wf);
+			linkOff(PELVIS, hipOff[s], FOOT_R + s, LEG, 0.05 + 0.3 * limp, wf);
 			linkOff(CHEST, shoulderOff[s], HAND_R + s, ARM, 0.12, 1.0);
 		}
 	}
