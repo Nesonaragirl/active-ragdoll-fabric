@@ -12,9 +12,13 @@ import org.joml.Vector3d;
 
 /**
  * Classic-Minecraft style active ragdoll: every limb is ONE rigid stick (no knees/elbows).
- * Position-based-dynamics particles driven by soft "muscle" targets plus a procedural gait controller:
- * alternating foot placement, stance/swing timing, pelvis sway, hip/shoulder counter-rotation,
- * acceleration lean, arm counter-swing, idle shuffles, landing impacts.
+ * Position-based-dynamics particles driven by soft "muscle" targets plus a procedural gait controller.
+ *
+ * Gait: legs are only ~0.7 blocks long but the player moves at ~4.3 blocks/s, so a pinned-foot walk would need
+ * absurd cadence. Like a real runner, strides are longer than the legs can plant: each foot plants for a short
+ * stance (about +-0.3 blocks around the hip), then swings through the air while the other foot takes over,
+ * with brief double-flight phases. Cadence/stride/swing time are derived from speed. At low speed the
+ * controller falls back to short corrective steps and idle shuffles.
  * The pelvis height is solved so the stiff planted legs exactly reach the ground (inverted pendulum).
  */
 public final class Ragdoll {
@@ -137,6 +141,7 @@ public final class Ragdoll {
 			x[HAND_R + s].set(b).add(0, -ARM, 0);
 			swinging[s] = false;
 			stanceT[s] = 0;
+			hike[s] = 0;
 		}
 		for (int i = 0; i < N; i++) { old[i].set(x[i]); v[i].zero(); }
 		lastP.set(P);
@@ -249,22 +254,47 @@ public final class Ragdoll {
 
 		for (int s = 0; s < 2; s++) if (!swinging[s]) stanceT[s] += h;
 
+		boolean moving = speed > 0.9;
+		double dirx = moving ? vel.x / speed : fwd.x, dirz = moving ? vel.z / speed : fwd.z;
+		double r = clamp(0.2 + 0.03 * speed, 0.22, 0.34); // how far behind/ahead of the hip a foot plants
 		int swingCount = (swinging[0] ? 1 : 0) + (swinging[1] ? 1 : 0);
-		int maxSwing = speed > 4.6 ? 2 : 1;
-		double thresh = 0.28 + 0.06 * Math.min(speed, 4.0);
 		int best = -1;
-		double bd = thresh;
-		for (int s = 0; s < 2; s++) {
-			if (swinging[s]) continue;
-			boolean overreach = Math.hypot(plant[s].x - P.x, plant[s].z - P.z) > LEG * 0.8;
-			double d = Math.hypot(plant[s].x - desired[s].x, plant[s].z - desired[s].z)
-				+ 0.8 * Math.abs(plant[s].y - desired[s].y);
-			// alternate feet: prefer the one that did not just step, and the one planted longest
-			double eff = d + (s != lastSwing ? 0.04 : 0.0) + 0.05 * Math.min(stanceT[s], 0.5);
-			if (overreach) { best = s; bd = 1e9; }
-			else if (swingCount < maxSwing && d > thresh && eff > bd && stanceT[s] > 0.06) { bd = eff; best = s; }
+		double dur = 0.3;
+
+		if (moving) {
+			// stride-based gait: a foot lifts once it is r behind the hip; the other foot must be past mid-swing
+			double bb = r;
+			for (int s = 0; s < 2; s++) {
+				if (swinging[s]) continue;
+				int o = 1 - s;
+				double behind = (P.x - plant[s].x) * dirx + (P.z - plant[s].z) * dirz;
+				boolean overreach = Math.hypot(plant[s].x - P.x, plant[s].z - P.z) > LEG * 0.85;
+				boolean otherOk = !swinging[o] || swingT[o] > 0.45;
+				boolean alt = s != lastSwing || behind > r * 1.8;
+				if (overreach) { best = s; bb = 1e9; }
+				else if (behind > bb && stanceT[s] > 0.04 && otherOk && alt) { bb = behind; best = s; }
+			}
+			if (best >= 0) {
+				double stride = Math.min(0.55 + 0.17 * speed, 1.5);
+				double ts = stride / speed; // time between footfalls
+				dur = clamp(2.0 * ts - 0.6 / speed, 0.16, 0.45);
+			}
+		} else {
+			// slow / turning: short corrective steps, one foot at a time
+			double thresh = 0.3;
+			double bd = thresh;
+			for (int s = 0; s < 2; s++) {
+				if (swinging[s]) continue;
+				boolean overreach = Math.hypot(plant[s].x - P.x, plant[s].z - P.z) > LEG * 0.8;
+				double d = Math.hypot(plant[s].x - desired[s].x, plant[s].z - desired[s].z)
+					+ 0.8 * Math.abs(plant[s].y - desired[s].y);
+				double eff = d + (s != lastSwing ? 0.04 : 0.0) + 0.05 * Math.min(stanceT[s], 0.5);
+				if (overreach) { best = s; bd = 1e9; }
+				else if (swingCount < 1 && d > thresh && eff > bd && stanceT[s] > 0.06) { bd = eff; best = s; }
+			}
+			dur = 0.34;
 		}
-		double dur = clamp(0.46 - 0.06 * speed, 0.16, 0.4);
+
 		if (best >= 0) {
 			startSwing(best, dur);
 			idleT = 0;
@@ -289,16 +319,20 @@ public final class Ragdoll {
 			if (swinging[s]) {
 				swingT[s] += h / swingDur[s];
 				double rem = Math.max(0.0, 1.0 - swingT[s]) * swingDur[s];
-				swingTo[s].set(desired[s]).add(vel.x * rem * 0.6, 0, vel.z * rem * 0.6);
+				if (moving) {
+					// land r ahead of where the hip will be when the swing ends
+					swingTo[s].set(P).fma(sgn(s) * HIP * 1.25, rgt).add(vel.x * rem + dirx * r, 0, vel.z * rem + dirz * r);
+				} else {
+					swingTo[s].set(desired[s]).add(vel.x * rem * 0.6, 0, vel.z * rem * 0.6);
+				}
 				double g = groundY(w, p, swingTo[s].x, P.y + 0.6, swingTo[s].z);
 				swingTo[s].y = Double.isNaN(g) ? P.y : g;
 
 				double t = Math.min(1.0, swingT[s]);
-				double e = t * t * t * (10 - 15 * t + 6 * t * t);
+				double e = moving ? t * t * (3 - 2 * t) : t * t * t * (10 - 15 * t + 6 * t * t);
 				footTarget[s].set(swingFrom[s]).lerp(swingTo[s], e); swingBaseY[s] = footTarget[s].y;
 				double stride = Math.hypot(swingTo[s].x - swingFrom[s].x, swingTo[s].z - swingFrom[s].z);
-				// lift peaks early in the swing, higher when running, extra clearance for steps up
-				double lift = 0.045 + 0.16 * Math.min(stride, 0.7) + (speed > 4.6 ? 0.06 : 0.0);
+				double lift = 0.045 + 0.1 * Math.min(stride, 0.9) + (speed > 4.6 ? 0.04 : 0.0);
 				footTarget[s].y += Math.sin(Math.PI * Math.pow(t, 0.7)) * lift;
 				footTarget[s].y += Math.max(0.0, swingTo[s].y - swingFrom[s].y) * Math.sin(Math.PI * Math.min(1.0, t * 1.3));
 				footK[s] = 90.0 * muscle;
@@ -421,7 +455,7 @@ public final class Ragdoll {
 				pull(FOOT_R + s, ground ? swingTip(a, footTarget[s], swingBaseY[s]) : reach(a, footTarget[s], LEG), footK[s], h);
 			}
 
-			// --- arm: one rigid stick, counter-swings against the opposite leg, loose and slightly lagging
+			// --- arm: one rigid stick, counter-swings against the opposite leg
 			shoulderPos(s, a);
 			if (ground) {
 				double armFwd = (footTarget[1 - s].x - P.x) * fwd.x + (footTarget[1 - s].z - P.z) * fwd.z;
