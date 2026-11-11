@@ -404,7 +404,7 @@ public final class Ragdoll {
 			if (ground && !swinging[s]) {
 				pull(FOOT_R + s, footTarget[s], footK[s], h);
 			} else {
-				pull(FOOT_R + s, reach(a, footTarget[s], LEG), footK[s], h);
+				pull(FOOT_R + s, ground ? swingTip(a, footTarget[s], swingBaseY[s]) : reach(a, footTarget[s], LEG), footK[s], h);
 			}
 
 			// --- arm: one rigid stick, counter-swings against the opposite leg, loose and slightly lagging
