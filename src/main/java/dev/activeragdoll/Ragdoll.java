@@ -435,7 +435,7 @@ public final class Ragdoll {
 				b.set(a).fma(sg * 0.8, rgt).add(0, up + 0.15 * Math.sin(time * 9.0 + s * Math.PI), 0);
 				b.set(reach2(a, b));
 			}
-			pull(HAND_R + s, b, 10.0 * m, h);
+			pull(HAND_R + s, b, 20.0 * m, h);
 		}
 	}
 
