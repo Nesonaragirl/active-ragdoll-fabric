@@ -12,8 +12,10 @@ import org.joml.Vector3d;
 
 /**
  * Classic-Minecraft style active ragdoll: every limb is ONE rigid stick (no knees/elbows).
- * Position-based-dynamics particles driven by soft "muscle" targets plus a procedural step controller.
- * Feet plant on raycast ground; the pelvis height is solved so the stiff legs exactly reach the planted feet.
+ * Position-based-dynamics particles driven by soft "muscle" targets plus a procedural gait controller:
+ * alternating foot placement, stance/swing timing, pelvis sway, hip/shoulder counter-rotation,
+ * acceleration lean, arm counter-swing, idle shuffles, landing impacts.
+ * The pelvis height is solved so the stiff planted legs exactly reach the ground (inverted pendulum).
  */
 public final class Ragdoll {
 	public static final double PX = 0.9375 / 16.0; // one model pixel in blocks
@@ -27,19 +29,21 @@ public final class Ragdoll {
 	private final Vector3d[] old = vecs(N), v = vecs(N);
 	private final boolean[] contact = new boolean[N];
 
-	private final Vector3d P = new Vector3d(), lastP = new Vector3d(), vel = new Vector3d();
-	private final Vector3d fwd = new Vector3d(), rgt = new Vector3d(), tUp = new Vector3d(), tRgt = new Vector3d();
+	private final Vector3d P = new Vector3d(), lastP = new Vector3d(), vel = new Vector3d(), prevVel = new Vector3d();
+	private final Vector3d fwd = new Vector3d(), rgt = new Vector3d(), tUp = new Vector3d(), tRgtH = new Vector3d(), tRgtS = new Vector3d();
 	private final Vector3d[] plant = vecs(2), swingFrom = vecs(2), swingTo = vecs(2), footTarget = vecs(2),
 		desired = vecs(2), hipOff = vecs(2), shoulderOff = vecs(2);
-	private final double[] footK = new double[2], swingT = new double[2], swingDur = {0.2, 0.2};
+	private final double[] footK = new double[2], swingT = new double[2], swingDur = {0.2, 0.2}, stanceT = new double[2];
 	private final boolean[] swinging = new boolean[2];
 	private final Vector3d a = new Vector3d(), b = new Vector3d(), c = new Vector3d();
 
-	private boolean init, ground;
+	private boolean init, ground, wasGround, sprinting;
 	private long lastNanos;
-	private double limp, muscle = 1.0, time;
-	private int lastHurt;
+	private double limp, muscle = 1.0, time, accF, airVy, swayAmt, idleT;
+	private int lastHurt, lastSwing = -1;
 	public double bodyYawDeg;
+	/** Hip / shoulder counter-rotation in radians (+ = rotate the right side forward). Read by the renderer. */
+	public double hipTwist, shoulderTwist;
 
 	static Vector3d[] vecs(int n) {
 		Vector3d[] arr = new Vector3d[n];
@@ -76,6 +80,10 @@ public final class Ragdoll {
 		vel.y += (clamp((P.y - lastP.y) / dt, -25, 25) - vel.y) * 0.3;
 		vel.z += (clamp((P.z - lastP.z) / dt, -25, 25) - vel.z) * 0.3;
 		lastP.set(P);
+		double ax = (vel.x - prevVel.x) / dt, az = (vel.z - prevVel.z) / dt;
+		accF += (clamp(ax * fwd.x + az * fwd.z, -40, 40) - accF) * 0.1;
+		prevVel.set(vel);
+		sprinting = p.isSprinting();
 
 		boolean dead = p.isDead() || p.getHealth() <= 0;
 		if (p.hurtTime > lastHurt) {
@@ -89,6 +97,24 @@ public final class Ragdoll {
 
 		ground = p.isOnGround() && !p.isSwimming() && !p.isFallFlying() && !p.isClimbing()
 			&& !p.hasVehicle() && !p.isSleeping() && muscle > 0.15;
+
+		// landing impact: torso folds forward, arms fly up, brief loss of muscle tone
+		if (!ground) {
+			airVy = Math.min(airVy, vel.y);
+		} else {
+			if (!wasGround && airVy < -3.5) {
+				double imp = clamp(-airVy * 0.025, 0.0, 0.35);
+				limp = Math.max(limp, imp);
+				muscle = 1.0 - limp;
+				v[CHEST].y -= imp * 5.0;
+				v[CHEST].fma(imp * 2.0, fwd);
+				v[HEADTOP].y -= imp * 4.0;
+				v[HAND_R].y += imp * 5.0;
+				v[HAND_L].y += imp * 5.0;
+			}
+			airVy = 0;
+		}
+		wasGround = ground;
 
 		int n = Math.max(1, Math.min(4, (int) Math.ceil(dt / 0.0167)));
 		double h = dt / n;
@@ -109,24 +135,35 @@ public final class Ragdoll {
 			b.set(x[CHEST]).add(0, -SHOULDER_DROP, 0).fma(sg * SHOULDER, rgt);
 			x[HAND_R + s].set(b).add(0, -ARM, 0);
 			swinging[s] = false;
+			stanceT[s] = 0;
 		}
 		for (int i = 0; i < N; i++) { old[i].set(x[i]); v[i].zero(); }
 		lastP.set(P);
 		vel.zero();
+		prevVel.zero();
+		hipTwist = shoulderTwist = swayAmt = accF = airVy = idleT = 0;
+		wasGround = true;
 		init = true;
+	}
+
+	/** Right vector rotated toward forward by ang, flattened against the torso axis. */
+	private void twistedRight(Vector3d out, double ang) {
+		out.set(rgt).mul(Math.cos(ang)).fma(Math.sin(ang), fwd);
+		out.fma(-out.dot(tUp), tUp);
+		if (out.lengthSquared() < 1e-6) out.set(rgt);
+		out.normalize();
 	}
 
 	private void frame() {
 		tUp.set(x[CHEST]).sub(x[PELVIS]);
 		if (tUp.lengthSquared() < 1e-8) tUp.set(0, 1, 0);
 		tUp.normalize();
-		tRgt.set(rgt).fma(-rgt.dot(tUp), tUp);
-		if (tRgt.lengthSquared() < 1e-6) tRgt.set(rgt);
-		tRgt.normalize();
+		twistedRight(tRgtH, hipTwist);
+		twistedRight(tRgtS, shoulderTwist);
 		for (int s = 0; s < 2; s++) {
 			double sg = sgn(s);
-			hipOff[s].set(tRgt).mul(sg * HIP);
-			shoulderOff[s].set(tUp).mul(-SHOULDER_DROP).fma(sg * SHOULDER, tRgt);
+			hipOff[s].set(tRgtH).mul(sg * HIP);
+			shoulderOff[s].set(tUp).mul(-SHOULDER_DROP).fma(sg * SHOULDER, tRgtS);
 		}
 	}
 
@@ -169,7 +206,7 @@ public final class Ragdoll {
 		if (!Double.isFinite(x[PELVIS].x + x[PELVIS].y + x[PELVIS].z + x[CHEST].y + x[HEADTOP].y)) init = false;
 	}
 
-	// ------------------------------------------------------------------ step controller (foot placement)
+	// ------------------------------------------------------------------ gait controller (foot placement)
 
 	private double groundY(ClientWorld w, PlayerEntity p, double px, double top, double pz) {
 		BlockHitResult hr = w.raycast(new RaycastContext(new Vec3d(px, top, pz), new Vec3d(px, top - 2.5, pz),
@@ -177,12 +214,13 @@ public final class Ragdoll {
 		return hr.getType() == HitResult.Type.BLOCK ? hr.getPos().y : Double.NaN;
 	}
 
-	private void startSwing(int s, double speed) {
+	private void startSwing(int s, double dur) {
 		swinging[s] = true;
 		swingT[s] = 0;
-		swingDur[s] = clamp(0.30 - 0.035 * speed, 0.13, 0.30);
+		swingDur[s] = dur;
 		swingFrom[s].set(plant[s]);
 		swingTo[s].set(desired[s]);
+		lastSwing = s;
 	}
 
 	private void footControl(PlayerEntity p, ClientWorld w, double h, double speed) {
@@ -195,15 +233,20 @@ public final class Ragdoll {
 		}
 
 		if (!ground) {
+			// airborne: legs scissor (last stepping leg stays forward), trailing against velocity
+			double scis = (lastSwing == 0 ? 1.0 : -1.0) * 0.22 * Math.min(1.0, speed / 3.0);
 			for (int s = 0; s < 2; s++) {
 				swinging[s] = false;
+				stanceT[s] = 0;
 				plant[s].set(x[FOOT_R + s]);
 				hipPos(s, a);
-				footTarget[s].set(a).add(0, -LEG, 0).fma(-0.05, vel).fma(sgn(s) * 0.08, rgt);
-				footK[s] = 6.0 * muscle;
+				footTarget[s].set(a).add(0, -LEG, 0).fma(-0.05, vel).fma(sgn(s) * 0.08, rgt).fma(sgn(s) * scis, fwd);
+				footK[s] = 10.0 * muscle;
 			}
 			return;
 		}
+
+		for (int s = 0; s < 2; s++) if (!swinging[s]) stanceT[s] += h;
 
 		int swingCount = (swinging[0] ? 1 : 0) + (swinging[1] ? 1 : 0);
 		int maxSwing = speed > 4.6 ? 2 : 1;
@@ -215,10 +258,31 @@ public final class Ragdoll {
 			boolean overreach = Math.hypot(plant[s].x - P.x, plant[s].z - P.z) > LEG * 0.8;
 			double d = Math.hypot(plant[s].x - desired[s].x, plant[s].z - desired[s].z)
 				+ 0.8 * Math.abs(plant[s].y - desired[s].y);
+			// alternate feet: prefer the one that did not just step, and the one planted longest
+			double eff = d + (s != lastSwing ? 0.04 : 0.0) + 0.05 * Math.min(stanceT[s], 0.5);
 			if (overreach) { best = s; bd = 1e9; }
-			else if (d > bd && swingCount < maxSwing) { bd = d; best = s; }
+			else if (swingCount < maxSwing && d > thresh && eff > bd) { bd = eff; best = s; }
 		}
-		if (best >= 0) startSwing(best, speed);
+		double dur = clamp(0.36 - 0.05 * speed, 0.14, 0.34);
+		if (best >= 0) {
+			startSwing(best, dur);
+			idleT = 0;
+		} else if (speed < 0.3 && swingCount == 0) {
+			// standing: after a pause, shuffle the most displaced foot back to a neutral stance
+			idleT += h;
+			if (idleT > 0.45) {
+				int s0 = -1;
+				double md = 0.05;
+				for (int s = 0; s < 2; s++) {
+					double d = Math.hypot(plant[s].x - desired[s].x, plant[s].z - desired[s].z);
+					if (d > md) { md = d; s0 = s; }
+				}
+				if (s0 >= 0) startSwing(s0, 0.3);
+				idleT = 0;
+			}
+		} else if (speed >= 0.3) {
+			idleT = 0;
+		}
 
 		for (int s = 0; s < 2; s++) {
 			if (swinging[s]) {
@@ -232,9 +296,12 @@ public final class Ragdoll {
 				double e = t * t * (3 - 2 * t);
 				footTarget[s].set(swingFrom[s]).lerp(swingTo[s], e);
 				double stride = Math.hypot(swingTo[s].x - swingFrom[s].x, swingTo[s].z - swingFrom[s].z);
-				footTarget[s].y += Math.sin(Math.PI * t) * (0.04 + 0.2 * Math.min(stride, 0.6));
+				// lift peaks early in the swing, higher when running, extra clearance for steps up
+				double lift = 0.045 + 0.16 * Math.min(stride, 0.7) + (speed > 4.6 ? 0.06 : 0.0);
+				footTarget[s].y += Math.sin(Math.PI * Math.pow(t, 0.7)) * lift;
+				footTarget[s].y += Math.max(0.0, swingTo[s].y - swingFrom[s].y) * Math.sin(Math.PI * Math.min(1.0, t * 1.3));
 				footK[s] = 45.0 * muscle;
-				if (swingT[s] >= 1.0) { swinging[s] = false; plant[s].set(swingTo[s]); }
+				if (swingT[s] >= 1.0) { swinging[s] = false; plant[s].set(swingTo[s]); stanceT[s] = 0; }
 			} else {
 				double g = groundY(w, p, plant[s].x, P.y + 0.6, plant[s].z);
 				if (!Double.isNaN(g)) plant[s].y += (g - plant[s].y) * Math.min(1.0, h * 25.0);
@@ -263,12 +330,39 @@ public final class Ragdoll {
 		return c;
 	}
 
+	private Vector3d reach2(Vector3d origin, Vector3d target) {
+		Vector3d d = new Vector3d(target).sub(origin);
+		if (d.lengthSquared() < 1e-8) d.set(0, -1, 0);
+		return d.normalize().mul(ARM).add(origin);
+	}
+
 	private void muscles(double speed, boolean sneak, double h) {
 		double m = muscle;
+		boolean idle = speed < 0.5;
 
-		// pelvis follows the real player; its height is solved so the stiff planted legs just reach the ground
+		// --- hip / shoulder counter-rotation (right foot forward -> right hip forward, left shoulder forward)
+		double tw = 0, ts = 0;
+		if (ground) {
+			double fR = (footTarget[0].x - P.x) * fwd.x + (footTarget[0].z - P.z) * fwd.z;
+			double fL = (footTarget[1].x - P.x) * fwd.x + (footTarget[1].z - P.z) * fwd.z;
+			tw = clamp((fR - fL) * 0.35, -0.2, 0.2) * Math.min(1.0, 0.3 + speed * 0.4);
+			ts = -tw * 1.2;
+		}
+		double kt = 1.0 - Math.exp(-16.0 * h);
+		hipTwist += (tw - hipTwist) * kt;
+		shoulderTwist += (ts - shoulderTwist) * kt;
+
+		// --- pelvis follows the real player, shifts weight over the stance foot
+		double swayT = 0;
+		for (int s = 0; s < 2; s++) {
+			if (swinging[s]) swayT += Math.sin(Math.PI * Math.min(1.0, swingT[s])) * (s == 0 ? -1.0 : 1.0);
+		}
+		swayT = swayT * 0.03 + (idle ? 0.006 * Math.sin(time * 0.9) : 0.0);
+		swayAmt += (swayT - swayAmt) * (1.0 - Math.exp(-10.0 * h));
+
 		double kxz = 40.0 * m;
-		double tx = P.x + vel.x / Math.max(kxz, 1.0), tz = P.z + vel.z / Math.max(kxz, 1.0);
+		double tx = P.x + vel.x / Math.max(kxz, 1.0) + rgt.x * swayAmt;
+		double tz = P.z + vel.z / Math.max(kxz, 1.0) + rgt.z * swayAmt;
 		double ty = P.y + LEG * (ground ? 0.999 : 0.95);
 		if (ground) {
 			for (int s = 0; s < 2; s++) {
@@ -280,18 +374,20 @@ public final class Ragdoll {
 		}
 		pull(PELVIS, tx, ty, tz, kxz, 30.0 * m, h);
 
-		// torso: stays almost upright (classic look), tiny lean into motion
-		double lean = clamp(speed * 0.02, 0.0, 0.08) + (sneak ? 0.3 : 0.0);
-		double sway = 0;
-		for (int s = 0; s < 2; s++) if (swinging[s]) sway += (s == 0 ? -0.03 : 0.03);
-		c.set(0, 1, 0).fma(lean, fwd).fma(sway, rgt).normalize();
+		// --- torso: mostly upright, leans into speed/acceleration, sways over the stance foot, breathes
+		double lean = clamp(speed * 0.03, 0.0, 0.18) + (sprinting ? 0.08 : 0.0)
+			+ clamp(accF * 0.012, -0.08, 0.12) + (sneak ? 0.3 : 0.0);
+		c.set(0, 1, 0).fma(lean, fwd).fma(swayAmt * 1.2, rgt).normalize();
 		a.set(x[PELVIS]).fma(TORSO, c);
+		if (idle) a.y += 0.003 * Math.sin(time * 1.7);
 		pull(CHEST, a, 18.0 * m, h);
 
+		// --- head: partly stabilised (stays more upright than the torso)
 		c.set(x[CHEST]).sub(x[PELVIS]);
 		if (c.lengthSquared() > 1e-8) c.normalize(); else c.set(0, 1, 0);
+		c.mul(0.5).add(0, 0.5, 0).normalize();
 		a.set(x[CHEST]).fma(HEAD, c);
-		pull(HEADTOP, a, 16.0 * m, h);
+		pull(HEADTOP, a, 14.0 * m, h);
 
 		for (int s = 0; s < 2; s++) {
 			double sg = sgn(s);
@@ -304,24 +400,22 @@ public final class Ragdoll {
 				pull(FOOT_R + s, reach(a, footTarget[s], LEG), footK[s], h);
 			}
 
-			// --- arm: one rigid stick, swings opposite the same-side leg
+			// --- arm: one rigid stick, counter-swings against the opposite leg, loose and slightly lagging
 			shoulderPos(s, a);
 			if (ground) {
 				double armFwd = (footTarget[1 - s].x - P.x) * fwd.x + (footTarget[1 - s].z - P.z) * fwd.z;
-				double ang = clamp(armFwd * 1.8, -0.8, 0.8);
-				b.set(a).add(0, -Math.cos(ang) * ARM, 0).fma(Math.sin(ang) * ARM, fwd);
+				double amp = Math.min(1.25, 0.55 + 0.1 * speed);
+				double ang = clamp(armFwd * (1.6 + 0.25 * Math.min(speed, 6.0)), -amp, amp);
+				if (idle) ang += 0.04 * Math.sin(time * 1.6 + s * 0.7);
+				b.set(a).add(0, -Math.cos(ang) * ARM, 0).fma(Math.sin(ang) * ARM, fwd).fma(sg * 0.07, rgt);
+				b.set(reach2(a, b));
 			} else {
-				b.set(a).fma(sg * 0.8, rgt).add(0, -0.3 + 0.3 * Math.sin(time * 9.0 + s * Math.PI), 0);
+				double up = vel.y > 0 ? 0.15 : -0.3;
+				b.set(a).fma(sg * 0.8, rgt).add(0, up + 0.15 * Math.sin(time * 9.0 + s * Math.PI), 0);
 				b.set(reach2(a, b));
 			}
-			pull(HAND_R + s, b, 14.0 * m, h);
+			pull(HAND_R + s, b, 10.0 * m, h);
 		}
-	}
-
-	private Vector3d reach2(Vector3d origin, Vector3d target) {
-		Vector3d d = new Vector3d(target).sub(origin);
-		if (d.lengthSquared() < 1e-8) d.set(0, -1, 0);
-		return d.normalize().mul(ARM).add(origin);
 	}
 
 	// ------------------------------------------------------------------ constraints & collision
