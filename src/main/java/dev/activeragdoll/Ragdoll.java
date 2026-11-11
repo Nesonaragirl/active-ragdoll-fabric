@@ -273,7 +273,7 @@ public final class Ragdoll {
 			idleT += h;
 			if (idleT > 0.8) {
 				int s0 = -1;
-				double md = 0.05;
+				double md = 0.1;
 				for (int s = 0; s < 2; s++) {
 					double d = Math.hypot(plant[s].x - desired[s].x, plant[s].z - desired[s].z);
 					if (d > md) { md = d; s0 = s; }
