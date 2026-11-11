@@ -163,7 +163,7 @@ public final class Ragdoll {
 		twistedRight(tRgtS, shoulderTwist);
 		for (int s = 0; s < 2; s++) {
 			double sg = sgn(s);
-			hipOff[s].set(tRgtH).mul(sg * HIP);
+			hipOff[s].set(tRgtH).mul(sg * HIP); hipOff[s].y += hike[s];
 			shoulderOff[s].set(tUp).mul(-SHOULDER_DROP).fma(sg * SHOULDER, tRgtS);
 		}
 	}
