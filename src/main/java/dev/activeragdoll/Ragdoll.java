@@ -401,7 +401,7 @@ public final class Ragdoll {
 		c.set(0, 1, 0).fma(lean, fwd).fma(swayAmt * 1.2, rgt).normalize();
 		a.set(x[PELVIS]).fma(TORSO, c);
 		if (idle) a.y += 0.003 * Math.sin(time * 1.7);
-		pull(CHEST, a, 18.0 * m, h);
+		pull(CHEST, a, 30.0 * m, h);
 
 		// --- head: partly stabilised (stays more upright than the torso)
 		c.set(x[CHEST]).sub(x[PELVIS]);
