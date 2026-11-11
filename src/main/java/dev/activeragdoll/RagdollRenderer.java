@@ -79,7 +79,7 @@ public final class RagdollRenderer {
 			r.shoulderPos(s, a);
 			seg(m, right ? parts.rArm : parts.lArm, a, x[Ragdoll.HAND_R + s], false, yawQ, o, vc, light, ov);
 			r.hipPos(s, a);
-			seg(m, right ? parts.rLeg : parts.lLeg, a, x[Ragdoll.FOOT_R + s], false, yawQ, o, vc, light, ov);
+			seg(m, right ? parts.rLeg : parts.lLeg, a, x[Ragdoll.FOOT_R + s], false, hipQ, o, vc, light, ov);
 		}
 	}
 
