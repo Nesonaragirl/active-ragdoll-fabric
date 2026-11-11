@@ -408,7 +408,7 @@ public final class Ragdoll {
 		if (c.lengthSquared() > 1e-8) c.normalize(); else c.set(0, 1, 0);
 		c.mul(0.5).add(0, 0.5, 0).normalize();
 		a.set(x[CHEST]).fma(HEAD, c);
-		pull(HEADTOP, a, 14.0 * m, h);
+		pull(HEADTOP, a, 24.0 * m, h);
 
 		for (int s = 0; s < 2; s++) {
 			double sg = sgn(s);
