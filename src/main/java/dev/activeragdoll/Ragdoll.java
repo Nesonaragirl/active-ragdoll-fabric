@@ -352,6 +352,12 @@ public final class Ragdoll {
 		double kt = 1.0 - Math.exp(-16.0 * h);
 		hipTwist += (tw - hipTwist) * kt;
 		shoulderTwist += (ts - shoulderTwist) * kt;
+		double hikeH = 0.07 + 0.015 * Math.min(speed, 6.0);
+		double kh = 1.0 - Math.exp(-30.0 * h);
+		for (int s = 0; s < 2; s++) {
+			double ht = swinging[s] ? hikeH * Math.sin(Math.PI * Math.pow(Math.min(1.0, swingT[s]), 0.7)) : 0.0;
+			hike[s] += (ht - hike[s]) * kh;
+		}
 
 		// --- pelvis follows the real player, shifts weight over the stance foot
 		double swayT = 0;
