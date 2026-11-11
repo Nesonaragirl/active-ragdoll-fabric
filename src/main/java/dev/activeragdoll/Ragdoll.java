@@ -360,7 +360,7 @@ public final class Ragdoll {
 		if (ground) {
 			double fR = (footTarget[0].x - P.x) * fwd.x + (footTarget[0].z - P.z) * fwd.z;
 			double fL = (footTarget[1].x - P.x) * fwd.x + (footTarget[1].z - P.z) * fwd.z;
-			tw = clamp((fR - fL) * 0.35, -0.2, 0.2) * Math.min(1.0, 0.3 + speed * 0.4);
+			tw = clamp((fR - fL) * 0.25, -0.12, 0.12) * Math.min(1.0, 0.3 + speed * 0.4);
 			ts = -tw * 1.2;
 		}
 		double kt = 1.0 - Math.exp(-16.0 * h);
