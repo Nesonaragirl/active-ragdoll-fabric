@@ -312,7 +312,7 @@ public final class Ragdoll {
 				b.set(a).add(0, -Math.cos(ang) * ARM, 0).fma(Math.sin(ang) * ARM, fwd);
 			} else {
 				b.set(a).fma(sg * 0.8, rgt).add(0, -0.3 + 0.3 * Math.sin(time * 9.0 + s * Math.PI), 0);
-				b = reach2(a, b);
+				b.set(reach2(a, b));
 			}
 			pull(HAND_R + s, b, 14.0 * m, h);
 		}
