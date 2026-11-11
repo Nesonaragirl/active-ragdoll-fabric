@@ -294,7 +294,7 @@ public final class Ragdoll {
 				swingTo[s].y = Double.isNaN(g) ? P.y : g;
 
 				double t = Math.min(1.0, swingT[s]);
-				double e = t * t * (3 - 2 * t);
+				double e = t * t * t * (10 - 15 * t + 6 * t * t);
 				footTarget[s].set(swingFrom[s]).lerp(swingTo[s], e); swingBaseY[s] = footTarget[s].y;
 				double stride = Math.hypot(swingTo[s].x - swingFrom[s].x, swingTo[s].z - swingFrom[s].z);
 				// lift peaks early in the swing, higher when running, extra clearance for steps up
