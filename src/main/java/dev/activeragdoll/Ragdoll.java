@@ -378,7 +378,7 @@ public final class Ragdoll {
 		for (int s = 0; s < 2; s++) {
 			if (swinging[s]) swayT += Math.sin(Math.PI * Math.min(1.0, swingT[s])) * (s == 0 ? -1.0 : 1.0);
 		}
-		swayT = swayT * 0.03 + (idle ? 0.006 * Math.sin(time * 0.9) : 0.0);
+		swayT = swayT * 0.02 + (idle ? 0.006 * Math.sin(time * 0.9) : 0.0);
 		swayAmt += (swayT - swayAmt) * (1.0 - Math.exp(-10.0 * h));
 
 		double kxz = 40.0 * m;
