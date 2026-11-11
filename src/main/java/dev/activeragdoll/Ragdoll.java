@@ -301,7 +301,7 @@ public final class Ragdoll {
 				double lift = 0.045 + 0.16 * Math.min(stride, 0.7) + (speed > 4.6 ? 0.06 : 0.0);
 				footTarget[s].y += Math.sin(Math.PI * Math.pow(t, 0.7)) * lift;
 				footTarget[s].y += Math.max(0.0, swingTo[s].y - swingFrom[s].y) * Math.sin(Math.PI * Math.min(1.0, t * 1.3));
-				footK[s] = 45.0 * muscle;
+				footK[s] = 90.0 * muscle;
 				if (swingT[s] >= 1.0) { swinging[s] = false; plant[s].set(swingTo[s]); stanceT[s] = 0; }
 			} else {
 				double g = groundY(w, p, plant[s].x, P.y + 0.6, plant[s].z);
