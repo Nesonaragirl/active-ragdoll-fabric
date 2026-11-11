@@ -77,7 +77,7 @@ public final class Ragdoll {
 
 		if (dt <= 1e-4) { frame(); return; }
 
-		vel.x += (clamp((P.x - lastP.x) / dt, -25, 25) - vel.x) * 0.3;
+		double va = 1.0 - Math.exp(-dt / 0.06); vel.x += (clamp((P.x - lastP.x) / dt, -25, 25) - vel.x) * va;
 		vel.y += (clamp((P.y - lastP.y) / dt, -25, 25) - vel.y) * 0.3;
 		vel.z += (clamp((P.z - lastP.z) / dt, -25, 25) - vel.z) * 0.3;
 		lastP.set(P);
