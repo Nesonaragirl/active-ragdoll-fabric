@@ -271,7 +271,7 @@ public final class Ragdoll {
 		} else if (speed < 0.3 && swingCount == 0) {
 			// standing: after a pause, shuffle the most displaced foot back to a neutral stance
 			idleT += h;
-			if (idleT > 0.45) {
+			if (idleT > 0.8) {
 				int s0 = -1;
 				double md = 0.05;
 				for (int s = 0; s < 2; s++) {
