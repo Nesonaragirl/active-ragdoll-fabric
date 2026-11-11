@@ -19,12 +19,12 @@ import net.minecraft.util.math.Vec3d;
 import org.joml.Quaternionf;
 import org.joml.Vector3d;
 
-/** Draws the vanilla player skin as oriented cuboids (head, torso, 2x2 arm segments, 2x2 leg segments). */
+/** Draws the vanilla player skin as 6 rigid cuboids: head, hat, torso, 2 arms, 2 legs (classic blocky look). */
 public final class RagdollRenderer {
 	private RagdollRenderer() {}
 
 	private static final class Parts {
-		ModelPart head, hat, body, rUpArm, rLoArm, lUpArm, lLoArm, rUpLeg, rLoLeg, lUpLeg, lLoLeg;
+		ModelPart head, hat, body, rArm, lArm, rLeg, lLeg;
 	}
 
 	private static Parts wide, slim;
@@ -36,23 +36,17 @@ public final class RagdollRenderer {
 		r.addChild("head", ModelPartBuilder.create().uv(0, 0).cuboid(-4, -8, -4, 8, 8, 8), ModelTransform.NONE);
 		r.addChild("hat", ModelPartBuilder.create().uv(32, 0).cuboid(-4, -8, -4, 8, 8, 8, new Dilation(0.5f)), ModelTransform.NONE);
 		r.addChild("body", ModelPartBuilder.create().uv(16, 16).cuboid(-4, 0, -2, 8, 12, 4), ModelTransform.NONE);
-		// arms: pivot at shoulder; upper = 7px (starts 2px above pivot), lower = 5px
-		r.addChild("rua", ModelPartBuilder.create().uv(40, 16).cuboid(-aw / 2, -2, -2, aw, 7, 4), ModelTransform.NONE);
-		r.addChild("rla", ModelPartBuilder.create().uv(40, 23).cuboid(-aw / 2, 0, -2, aw, 5, 4), ModelTransform.NONE);
-		r.addChild("lua", ModelPartBuilder.create().uv(32, 48).cuboid(-aw / 2, -2, -2, aw, 7, 4), ModelTransform.NONE);
-		r.addChild("lla", ModelPartBuilder.create().uv(32, 55).cuboid(-aw / 2, 0, -2, aw, 5, 4), ModelTransform.NONE);
-		// legs: 6px thigh + 6px shin
-		r.addChild("rul", ModelPartBuilder.create().uv(0, 16).cuboid(-2, 0, -2, 4, 6, 4), ModelTransform.NONE);
-		r.addChild("rll", ModelPartBuilder.create().uv(0, 22).cuboid(-2, 0, -2, 4, 6, 4), ModelTransform.NONE);
-		r.addChild("lul", ModelPartBuilder.create().uv(16, 48).cuboid(-2, 0, -2, 4, 6, 4), ModelTransform.NONE);
-		r.addChild("lll", ModelPartBuilder.create().uv(16, 54).cuboid(-2, 0, -2, 4, 6, 4), ModelTransform.NONE);
+		// arms pivot at the shoulder (2px below the top of the arm)
+		r.addChild("ra", ModelPartBuilder.create().uv(40, 16).cuboid(-aw / 2, -2, -2, aw, 12, 4), ModelTransform.NONE);
+		r.addChild("la", ModelPartBuilder.create().uv(32, 48).cuboid(-aw / 2, -2, -2, aw, 12, 4), ModelTransform.NONE);
+		// legs pivot at the hip
+		r.addChild("rl", ModelPartBuilder.create().uv(0, 16).cuboid(-2, 0, -2, 4, 12, 4), ModelTransform.NONE);
+		r.addChild("ll", ModelPartBuilder.create().uv(16, 48).cuboid(-2, 0, -2, 4, 12, 4), ModelTransform.NONE);
 		ModelPart root = TexturedModelData.of(md, 64, 64).createModel();
 		Parts p = new Parts();
 		p.head = root.getChild("head"); p.hat = root.getChild("hat"); p.body = root.getChild("body");
-		p.rUpArm = root.getChild("rua"); p.rLoArm = root.getChild("rla");
-		p.lUpArm = root.getChild("lua"); p.lLoArm = root.getChild("lla");
-		p.rUpLeg = root.getChild("rul"); p.rLoLeg = root.getChild("rll");
-		p.lUpLeg = root.getChild("lul"); p.lLoLeg = root.getChild("lll");
+		p.rArm = root.getChild("ra"); p.lArm = root.getChild("la");
+		p.rLeg = root.getChild("rl"); p.lLeg = root.getChild("ll");
 		return p;
 	}
 
@@ -83,11 +77,9 @@ public final class RagdollRenderer {
 		for (int s = 0; s < 2; s++) {
 			boolean right = s == 0;
 			r.shoulderPos(s, a);
-			seg(m, right ? parts.rUpArm : parts.lUpArm, a, x[Ragdoll.ELBOW_R + 2 * s], false, yawQ, o, vc, light, ov);
-			seg(m, right ? parts.rLoArm : parts.lLoArm, x[Ragdoll.ELBOW_R + 2 * s], x[Ragdoll.HAND_R + 2 * s], false, yawQ, o, vc, light, ov);
+			seg(m, right ? parts.rArm : parts.lArm, a, x[Ragdoll.HAND_R + s], false, yawQ, o, vc, light, ov);
 			r.hipPos(s, a);
-			seg(m, right ? parts.rUpLeg : parts.lUpLeg, a, x[Ragdoll.KNEE_R + 2 * s], false, yawQ, o, vc, light, ov);
-			seg(m, right ? parts.rLoLeg : parts.lLoLeg, x[Ragdoll.KNEE_R + 2 * s], x[Ragdoll.ANKLE_R + 2 * s], false, yawQ, o, vc, light, ov);
+			seg(m, right ? parts.rLeg : parts.lLeg, a, x[Ragdoll.FOOT_R + s], false, yawQ, o, vc, light, ov);
 		}
 	}
 
