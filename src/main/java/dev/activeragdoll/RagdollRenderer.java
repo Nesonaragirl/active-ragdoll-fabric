@@ -63,7 +63,7 @@ public final class RagdollRenderer {
 		Quaternionf yawQ = new Quaternionf().rotationY((float) (Math.PI - Math.toRadians(r.bodyYawDeg) + r.shoulderTwist)); Quaternionf hipQ = new Quaternionf().rotationY((float) (Math.PI - Math.toRadians(r.bodyYawDeg) + r.hipTwist));
 
 		float headYaw = MathHelper.lerpAngleDegrees(td, p.prevHeadYaw, p.headYaw);
-		float netYaw = MathHelper.clamp(MathHelper.wrapDegrees(headYaw - (float) r.bodyYawDeg), -80f, 80f);
+		float netYaw = MathHelper.clamp(MathHelper.wrapDegrees(headYaw - (float) (r.bodyYawDeg - Math.toDegrees(r.shoulderTwist))), -80f, 80f);
 		parts.head.pitch = parts.hat.pitch = (float) Math.toRadians(p.getPitch(td));
 		parts.head.yaw = parts.hat.yaw = (float) Math.toRadians(netYaw);
 
