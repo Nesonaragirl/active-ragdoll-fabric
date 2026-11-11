@@ -390,7 +390,7 @@ public final class Ragdoll {
 				if (swinging[s]) continue;
 				double dx = tx + hipOff[s].x - plant[s].x, dz = tz + hipOff[s].z - plant[s].z;
 				double reachY = Math.sqrt(Math.max(1e-4, LEG * LEG - dx * dx - dz * dz));
-				ty = Math.min(ty, plant[s].y + reachY);
+				ty = Math.min(ty, plant[s].y + reachY - hipOff[s].y);
 			}
 		}
 		pull(PELVIS, tx, ty, tz, kxz, 30.0 * m, h);
