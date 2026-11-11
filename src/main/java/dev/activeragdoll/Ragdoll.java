@@ -82,7 +82,7 @@ public final class Ragdoll {
 		vel.z += (clamp((P.z - lastP.z) / dt, -25, 25) - vel.z) * va;
 		lastP.set(P);
 		double ax = (vel.x - prevVel.x) / dt, az = (vel.z - prevVel.z) / dt;
-		accF += (clamp(ax * fwd.x + az * fwd.z, -40, 40) - accF) * 0.1;
+		accF += (clamp(ax * fwd.x + az * fwd.z, -40, 40) - accF) * (1.0 - Math.exp(-dt / 0.15));
 		prevVel.set(vel);
 		sprinting = p.isSprinting();
 
