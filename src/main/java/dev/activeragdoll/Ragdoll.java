@@ -11,19 +11,17 @@ import net.minecraft.world.RaycastContext;
 import org.joml.Vector3d;
 
 /**
- * Position-based-dynamics skeleton driven by "muscles" (soft position targets) plus a procedural
- * step controller. The root follows the real (server-authoritative) player; limbs are simulated.
- * Feet are planted on raycast ground positions and only lift when they drift too far from the hips.
+ * Classic-Minecraft style active ragdoll: every limb is ONE rigid stick (no knees/elbows).
+ * Position-based-dynamics particles driven by soft "muscle" targets plus a procedural step controller.
+ * Feet plant on raycast ground; the pelvis height is solved so the stiff legs exactly reach the planted feet.
  */
 public final class Ragdoll {
-	public static final double PX = 0.9375 / 16.0; // one model pixel in blocks (player model scale)
-	public static final double THIGH = 6 * PX, SHIN = 6 * PX, TORSO = 12 * PX, HEAD = 8 * PX, UARM = 5 * PX, FARM = 5 * PX;
-	static final double LEG = THIGH + SHIN, ARM = UARM + FARM;
+	public static final double PX = 0.9375 / 16.0; // one model pixel in blocks
+	public static final double LEG = 12 * PX, TORSO = 12 * PX, HEAD = 8 * PX, ARM = 10 * PX; // ARM = shoulder pivot -> hand
 	static final double HIP = 2 * PX, SHOULDER = 6 * PX, SHOULDER_DROP = 2 * PX;
 	static final double GRAVITY = 26.0;
 
-	public static final int PELVIS = 0, CHEST = 1, HEADTOP = 2, KNEE_R = 3, ANKLE_R = 4, KNEE_L = 5, ANKLE_L = 6,
-		ELBOW_R = 7, HAND_R = 8, ELBOW_L = 9, HAND_L = 10, N = 11;
+	public static final int PELVIS = 0, CHEST = 1, HEADTOP = 2, FOOT_R = 3, FOOT_L = 4, HAND_R = 5, HAND_L = 6, N = 7;
 
 	public final Vector3d[] x = vecs(N);
 	private final Vector3d[] old = vecs(N), v = vecs(N);
@@ -100,18 +98,16 @@ public final class Ragdoll {
 
 	private void reset() {
 		frame();
-		x[PELVIS].set(P.x, P.y + LEG * 0.97, P.z);
+		x[PELVIS].set(P.x, P.y + LEG, P.z);
 		x[CHEST].set(x[PELVIS]).add(0, TORSO, 0);
 		x[HEADTOP].set(x[CHEST]).add(0, HEAD, 0);
 		for (int s = 0; s < 2; s++) {
 			double sg = sgn(s);
 			a.set(P).fma(sg * HIP, rgt);
 			plant[s].set(a);
-			x[ANKLE_R + 2 * s].set(a);
-			x[KNEE_R + 2 * s].set(a.x, P.y + SHIN, a.z).fma(0.04, fwd);
+			x[FOOT_R + s].set(a);
 			b.set(x[CHEST]).add(0, -SHOULDER_DROP, 0).fma(sg * SHOULDER, rgt);
-			x[ELBOW_R + 2 * s].set(b).add(0, -UARM, 0);
-			x[HAND_R + 2 * s].set(b).add(0, -ARM, 0);
+			x[HAND_R + s].set(b).add(0, -ARM, 0);
 			swinging[s] = false;
 		}
 		for (int i = 0; i < N; i++) { old[i].set(x[i]); v[i].zero(); }
@@ -159,10 +155,8 @@ public final class Ragdoll {
 		collide(w, CHEST, 0.14);
 		collide(w, HEADTOP, 0.12);
 		for (int s = 0; s < 2; s++) {
-			collide(w, KNEE_R + 2 * s, 0.07);
-			collide(w, ANKLE_R + 2 * s, 0.02);
-			collide(w, ELBOW_R + 2 * s, 0.05);
-			collide(w, HAND_R + 2 * s, 0.05);
+			collide(w, FOOT_R + s, 0.02);
+			collide(w, HAND_R + s, 0.05);
 		}
 
 		double fr = Math.pow(0.6, h * 60.0);
@@ -194,8 +188,8 @@ public final class Ragdoll {
 	private void footControl(PlayerEntity p, ClientWorld w, double h, double speed) {
 		for (int s = 0; s < 2; s++) {
 			desired[s].set(P).fma(sgn(s) * HIP * 1.25, rgt);
-			desired[s].x += clamp(vel.x * 0.17, -0.5, 0.5);
-			desired[s].z += clamp(vel.z * 0.17, -0.5, 0.5);
+			desired[s].x += clamp(vel.x * 0.15, -0.35, 0.35);
+			desired[s].z += clamp(vel.z * 0.15, -0.35, 0.35);
 			double g = groundY(w, p, desired[s].x, P.y + 0.6, desired[s].z);
 			desired[s].y = Double.isNaN(g) ? P.y : g;
 		}
@@ -203,9 +197,9 @@ public final class Ragdoll {
 		if (!ground) {
 			for (int s = 0; s < 2; s++) {
 				swinging[s] = false;
-				plant[s].set(x[ANKLE_R + 2 * s]);
+				plant[s].set(x[FOOT_R + s]);
 				hipPos(s, a);
-				footTarget[s].set(a).add(0, -LEG * 0.85, 0).fma(-0.04, vel).fma(sgn(s) * 0.08, rgt);
+				footTarget[s].set(a).add(0, -LEG, 0).fma(-0.05, vel).fma(sgn(s) * 0.08, rgt);
 				footK[s] = 6.0 * muscle;
 			}
 			return;
@@ -213,12 +207,12 @@ public final class Ragdoll {
 
 		int swingCount = (swinging[0] ? 1 : 0) + (swinging[1] ? 1 : 0);
 		int maxSwing = speed > 4.6 ? 2 : 1;
-		double thresh = 0.26 + 0.05 * Math.min(speed, 4.0);
+		double thresh = 0.22 + 0.04 * Math.min(speed, 4.0);
 		int best = -1;
 		double bd = thresh;
 		for (int s = 0; s < 2; s++) {
 			if (swinging[s]) continue;
-			boolean overreach = Math.hypot(plant[s].x - P.x, plant[s].z - P.z) > LEG * 1.25;
+			boolean overreach = Math.hypot(plant[s].x - P.x, plant[s].z - P.z) > LEG * 0.8;
 			double d = Math.hypot(plant[s].x - desired[s].x, plant[s].z - desired[s].z)
 				+ 0.8 * Math.abs(plant[s].y - desired[s].y);
 			if (overreach) { best = s; bd = 1e9; }
@@ -238,7 +232,7 @@ public final class Ragdoll {
 				double e = t * t * (3 - 2 * t);
 				footTarget[s].set(swingFrom[s]).lerp(swingTo[s], e);
 				double stride = Math.hypot(swingTo[s].x - swingFrom[s].x, swingTo[s].z - swingFrom[s].z);
-				footTarget[s].y += Math.sin(Math.PI * t) * (0.06 + 0.3 * Math.min(stride, 0.7));
+				footTarget[s].y += Math.sin(Math.PI * t) * (0.04 + 0.2 * Math.min(stride, 0.6));
 				footK[s] = 45.0 * muscle;
 				if (swingT[s] >= 1.0) { swinging[s] = false; plant[s].set(swingTo[s]); }
 			} else {
@@ -261,73 +255,73 @@ public final class Ragdoll {
 
 	private void pull(int i, Vector3d t, double k, double h) { pull(i, t.x, t.y, t.z, k, k, h); }
 
+	/** Sets c to origin + dir * len (dir normalised). */
+	private Vector3d reach(Vector3d origin, Vector3d target, double len) {
+		c.set(target).sub(origin);
+		if (c.lengthSquared() < 1e-8) c.set(0, -1, 0);
+		c.normalize().mul(len).add(origin);
+		return c;
+	}
+
 	private void muscles(double speed, boolean sneak, double h) {
 		double m = muscle;
 
-		// pelvis: follows the real player; height limited by reach of planted legs
-		double ceiling = P.y + LEG * 0.98, floor = -1e9, bob = 0;
+		// pelvis follows the real player; its height is solved so the stiff planted legs just reach the ground
+		double kxz = 40.0 * m;
+		double tx = P.x + vel.x / Math.max(kxz, 1.0), tz = P.z + vel.z / Math.max(kxz, 1.0);
+		double ty = P.y + LEG * (ground ? 0.999 : 0.95);
 		if (ground) {
 			for (int s = 0; s < 2; s++) {
-				if (!swinging[s]) {
-					ceiling = Math.min(ceiling, plant[s].y + LEG * 0.98);
-					floor = Math.max(floor, plant[s].y + 0.35);
-				} else {
-					bob = 0.03 * Math.sin(Math.PI * Math.min(1.0, swingT[s]));
-				}
+				if (swinging[s]) continue;
+				double dx = tx + hipOff[s].x - plant[s].x, dz = tz + hipOff[s].z - plant[s].z;
+				double reachY = Math.sqrt(Math.max(1e-4, LEG * LEG - dx * dx - dz * dz));
+				ty = Math.min(ty, plant[s].y + reachY);
 			}
 		}
-		double ty = P.y + LEG * (ground ? 0.97 : 0.9) - (sneak ? 0.17 : 0.0) + bob;
-		if (ground) ty = Math.min(Math.max(ty, floor), ceiling);
-		double kxz = 40.0 * m;
-		pull(PELVIS, P.x + vel.x / Math.max(kxz, 1.0), ty, P.z + vel.z / Math.max(kxz, 1.0), kxz, 30.0 * m, h);
+		pull(PELVIS, tx, ty, tz, kxz, 30.0 * m, h);
 
-		// torso lean into motion, sway over the stance foot
-		double lean = clamp(speed * 0.05, 0.0, 0.3) + (sneak ? 0.4 : 0.0);
+		// torso: stays almost upright (classic look), tiny lean into motion
+		double lean = clamp(speed * 0.02, 0.0, 0.08) + (sneak ? 0.3 : 0.0);
 		double sway = 0;
-		for (int s = 0; s < 2; s++) if (swinging[s]) sway += (s == 0 ? -0.06 : 0.06);
+		for (int s = 0; s < 2; s++) if (swinging[s]) sway += (s == 0 ? -0.03 : 0.03);
 		c.set(0, 1, 0).fma(lean, fwd).fma(sway, rgt).normalize();
 		a.set(x[PELVIS]).fma(TORSO, c);
-		pull(CHEST, a, 16.0 * m, h);
+		pull(CHEST, a, 18.0 * m, h);
 
 		c.set(x[CHEST]).sub(x[PELVIS]);
 		if (c.lengthSquared() > 1e-8) c.normalize(); else c.set(0, 1, 0);
 		a.set(x[CHEST]).fma(HEAD, c);
-		pull(HEADTOP, a, 14.0 * m, h);
+		pull(HEADTOP, a, 16.0 * m, h);
 
 		for (int s = 0; s < 2; s++) {
 			double sg = sgn(s);
 
-			// --- leg: ankle follows foot target, knee uses analytic two-bone IK pole (forward)
-			int an = ANKLE_R + 2 * s, kn = KNEE_R + 2 * s;
-			pull(an, footTarget[s], footK[s], h);
+			// --- leg: one rigid stick. Swinging/airborne feet are projected onto the leg-length sphere.
 			hipPos(s, a);
-			b.set(x[an]).sub(a);
-			double L = b.length();
-			if (L > 1e-6) {
-				b.div(L);
-				double hk = Math.max(0.015, Math.sqrt(Math.max(0.0, THIGH * THIGH - 0.25 * L * L)));
-				c.set(fwd).fma(-fwd.dot(b), b);
-				if (c.lengthSquared() < 1e-6) c.set(rgt);
-				c.normalize();
-				c.mul(hk).fma(L * 0.5, b).add(a);
-				pull(kn, c, 25.0 * m, h);
+			if (ground && !swinging[s]) {
+				pull(FOOT_R + s, footTarget[s], footK[s], h);
+			} else {
+				pull(FOOT_R + s, reach(a, footTarget[s], LEG), footK[s], h);
 			}
 
-			// --- arm: swings opposite the same-side leg; hangs loosely otherwise
+			// --- arm: one rigid stick, swings opposite the same-side leg
 			shoulderPos(s, a);
-			double ang;
 			if (ground) {
 				double armFwd = (footTarget[1 - s].x - P.x) * fwd.x + (footTarget[1 - s].z - P.z) * fwd.z;
-				ang = clamp(armFwd * 1.8, -0.8, 0.8);
-				b.set(a).add(0, -Math.cos(ang) * ARM * 0.97, 0).fma(Math.sin(ang) * ARM * 0.97, fwd).fma(sg * 0.05, rgt);
+				double ang = clamp(armFwd * 1.8, -0.8, 0.8);
+				b.set(a).add(0, -Math.cos(ang) * ARM, 0).fma(Math.sin(ang) * ARM, fwd);
 			} else {
-				ang = 0.6;
-				b.set(a).fma(sg * 0.65, rgt).add(0, -0.2 + 0.25 * Math.sin(time * 9.0 + s * Math.PI), 0);
+				b.set(a).fma(sg * 0.8, rgt).add(0, -0.3 + 0.3 * Math.sin(time * 9.0 + s * Math.PI), 0);
+				b = reach2(a, b);
 			}
-			pull(HAND_R + 2 * s, b, 9.0 * m, h);
-			c.set(a).add(b).mul(0.5).fma(0.045 + 0.13 * Math.max(0.0, Math.sin(ang)), fwd);
-			pull(ELBOW_R + 2 * s, c, 6.0 * m, h);
+			pull(HAND_R + s, b, 14.0 * m, h);
 		}
+	}
+
+	private Vector3d reach2(Vector3d origin, Vector3d target) {
+		Vector3d d = new Vector3d(target).sub(origin);
+		if (d.lengthSquared() < 1e-8) d.set(0, -1, 0);
+		return d.normalize().mul(ARM).add(origin);
 	}
 
 	// ------------------------------------------------------------------ constraints & collision
@@ -356,12 +350,9 @@ public final class Ragdoll {
 		link(PELVIS, CHEST, TORSO, 1.0, 1.0);
 		link(CHEST, HEADTOP, HEAD, 0.5, 1.0);
 		for (int s = 0; s < 2; s++) {
-			int kn = KNEE_R + 2 * s, an = ANKLE_R + 2 * s, el = ELBOW_R + 2 * s, hd = HAND_R + 2 * s;
-			double wa = (ground && !swinging[s] && muscle > 0.2) ? 0.1 : 1.0;
-			linkOff(PELVIS, hipOff[s], kn, THIGH, 0.35, 1.0);
-			link(kn, an, SHIN, 1.0, wa);
-			linkOff(CHEST, shoulderOff[s], el, UARM, 0.12, 1.0);
-			link(el, hd, FARM, 1.0, 1.0);
+			double wf = (ground && !swinging[s] && muscle > 0.2) ? 0.1 : 1.0;
+			linkOff(PELVIS, hipOff[s], FOOT_R + s, LEG, 0.35, wf);
+			linkOff(CHEST, shoulderOff[s], HAND_R + s, ARM, 0.12, 1.0);
 		}
 	}
 
