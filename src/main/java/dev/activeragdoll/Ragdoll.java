@@ -393,7 +393,7 @@ public final class Ragdoll {
 				ty = Math.min(ty, plant[s].y + reachY - hipOff[s].y);
 			}
 		}
-		pull(PELVIS, tx, ty, tz, kxz, 30.0 * m, h);
+		pull(PELVIS, tx, ty, tz, kxz, 60.0 * m, h);
 
 		// --- torso: mostly upright, leans into speed/acceleration, sways over the stance foot, breathes
 		double lean = clamp(speed * 0.03, 0.0, 0.18) + (sprinting ? 0.08 : 0.0)
