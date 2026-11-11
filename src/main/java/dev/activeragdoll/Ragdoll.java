@@ -425,7 +425,7 @@ public final class Ragdoll {
 			shoulderPos(s, a);
 			if (ground) {
 				double armFwd = (footTarget[1 - s].x - P.x) * fwd.x + (footTarget[1 - s].z - P.z) * fwd.z;
-				double amp = Math.min(1.25, 0.55 + 0.1 * speed);
+				double amp = Math.min(1.0, 0.4 + 0.08 * speed);
 				double ang = clamp(armFwd * (1.6 + 0.25 * Math.min(speed, 6.0)), -amp, amp);
 				if (idle) ang += 0.04 * Math.sin(time * 1.6 + s * 0.7);
 				b.set(a).add(0, -Math.cos(ang) * ARM, 0).fma(Math.sin(ang) * ARM, fwd).fma(sg * 0.07, rgt);
