@@ -264,7 +264,7 @@ public final class Ragdoll {
 			if (overreach) { best = s; bd = 1e9; }
 			else if (swingCount < maxSwing && d > thresh && eff > bd) { bd = eff; best = s; }
 		}
-		double dur = clamp(0.36 - 0.05 * speed, 0.14, 0.34);
+		double dur = clamp(0.46 - 0.06 * speed, 0.16, 0.4);
 		if (best >= 0) {
 			startSwing(best, dur);
 			idleT = 0;
