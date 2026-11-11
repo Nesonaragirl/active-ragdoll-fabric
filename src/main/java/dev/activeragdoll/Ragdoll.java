@@ -262,7 +262,7 @@ public final class Ragdoll {
 			// alternate feet: prefer the one that did not just step, and the one planted longest
 			double eff = d + (s != lastSwing ? 0.04 : 0.0) + 0.05 * Math.min(stanceT[s], 0.5);
 			if (overreach) { best = s; bd = 1e9; }
-			else if (swingCount < maxSwing && d > thresh && eff > bd) { bd = eff; best = s; }
+			else if (swingCount < maxSwing && d > thresh && eff > bd && stanceT[s] > 0.06) { bd = eff; best = s; }
 		}
 		double dur = clamp(0.46 - 0.06 * speed, 0.16, 0.4);
 		if (best >= 0) {
