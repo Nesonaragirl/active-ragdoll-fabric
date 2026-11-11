@@ -35,6 +35,7 @@ public final class Ragdoll {
 		desired = vecs(2), hipOff = vecs(2), shoulderOff = vecs(2);
 	private final double[] footK = new double[2], swingT = new double[2], swingDur = {0.2, 0.2}, stanceT = new double[2];
 	private final boolean[] swinging = new boolean[2];
+	private final double[] hike = new double[2], swingBaseY = new double[2];
 	private final Vector3d a = new Vector3d(), b = new Vector3d(), c = new Vector3d();
 
 	private boolean init, ground, wasGround, sprinting;
