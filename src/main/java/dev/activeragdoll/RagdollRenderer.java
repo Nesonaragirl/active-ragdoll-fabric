@@ -60,7 +60,7 @@ public final class RagdollRenderer {
 		VertexConsumer vc = vcp.getBuffer(RenderLayer.getEntityCutoutNoCull(sk.texture()));
 		int ov = LivingEntityRenderer.getOverlay(p, 0f);
 		Vec3d o = p.getLerpedPos(td);
-		Quaternionf yawQ = new Quaternionf().rotationY((float) (Math.PI - Math.toRadians(r.bodyYawDeg)));
+		Quaternionf yawQ = new Quaternionf().rotationY((float) (Math.PI - Math.toRadians(r.bodyYawDeg) + r.shoulderTwist)); Quaternionf hipQ = new Quaternionf().rotationY((float) (Math.PI - Math.toRadians(r.bodyYawDeg) + r.hipTwist));
 
 		float headYaw = MathHelper.lerpAngleDegrees(td, p.prevHeadYaw, p.headYaw);
 		float netYaw = MathHelper.clamp(MathHelper.wrapDegrees(headYaw - (float) r.bodyYawDeg), -80f, 80f);
