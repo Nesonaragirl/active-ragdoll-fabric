@@ -251,7 +251,7 @@ public final class Ragdoll {
 
 		int swingCount = (swinging[0] ? 1 : 0) + (swinging[1] ? 1 : 0);
 		int maxSwing = speed > 4.6 ? 2 : 1;
-		double thresh = 0.22 + 0.04 * Math.min(speed, 4.0);
+		double thresh = 0.28 + 0.06 * Math.min(speed, 4.0);
 		int best = -1;
 		double bd = thresh;
 		for (int s = 0; s < 2; s++) {
