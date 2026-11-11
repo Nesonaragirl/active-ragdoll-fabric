@@ -331,6 +331,20 @@ public final class Ragdoll {
 		return c;
 	}
 
+	/** Foot position for a swinging leg: horizontally at the path point, vertically on the leg-length sphere under the hip. */
+	private Vector3d swingTip(Vector3d hip, Vector3d tgt, double baseY) {
+		double dx = tgt.x - hip.x, dz = tgt.z - hip.z, d2 = dx * dx + dz * dz, l2 = LEG * LEG;
+		if (d2 > l2 * 0.98) {
+			double k = Math.sqrt(l2 * 0.98 / d2);
+			dx *= k;
+			dz *= k;
+			d2 = l2 * 0.98;
+		}
+		double sy = hip.y - Math.sqrt(l2 - d2);
+		c.set(hip.x + dx, Math.max(sy, baseY), hip.z + dz);
+		return c;
+	}
+
 	private Vector3d reach2(Vector3d origin, Vector3d target) {
 		Vector3d d = new Vector3d(target).sub(origin);
 		if (d.lengthSquared() < 1e-8) d.set(0, -1, 0);
